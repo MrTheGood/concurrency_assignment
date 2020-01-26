@@ -22,7 +22,7 @@ namespace SocketServer
     [SuppressMessage("ReSharper", "IdentifierTypo")]
     [SuppressMessage("ReSharper", "UnusedMember.Global")]
     [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
-    public class ClientInfo
+    public abstract class ClientInfo
     {
         public string studentnr { get; set; }
         public string classname { get; set; }
