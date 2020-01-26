@@ -1,13 +1,19 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-/* Note: If you are using .net core 2.1, you need to install System.Text.Json (use NuGet). */
 using System.Text.Json;
 using System.Threading;
 
+/* Note: If you are using .net core 2.1, you need to install System.Text.Json (use NuGet). */
+
 namespace SocketClient
 {
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    [SuppressMessage("ReSharper", "IdentifierTypo")]
+    [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
+    [SuppressMessage("ReSharper", "UnusedMember.Global")]
     public class ClientInfo
     {
         public string studentnr { get; set; }
@@ -19,7 +25,9 @@ namespace SocketClient
         public string status { get; set; }
     }
 
-    public class Message
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    [SuppressMessage("ReSharper", "UnusedMember.Global")]
+    public static class Message
     {
         public const string welcome = "WELCOME";
         public const string stopCommunication = "COMC-STOP";
@@ -29,63 +37,63 @@ namespace SocketClient
 
     public class Client
     {
-        public Socket clientSocket;
-        private ClientInfo info;
-        public IPEndPoint localEndPoint;
-        public IPAddress ipAddress = IPAddress.Parse("127.0.0.1");
-        public readonly int portNumber = 11111;
-        public readonly int minWaitingTime = 50, maxWaitingTime = 100;
-        public int waitingTime = 0;
-        string baseStdNumber = "0700";
-
-        private String msgToSend;
+        private Socket _clientSocket;
+        private readonly ClientInfo _info;
+        private IPEndPoint _localEndPoint;
+        private readonly IPAddress _ipAddress = IPAddress.Parse("127.0.0.1");
+        private readonly int PortNumber = 11111;
+        public readonly int MinWaitingTime = 50, MaxWaitingTime = 100;
+        private readonly int _waitingTime;
+        private string _baseStdNumber = "0700";
 
         public Client(bool finishing, int n)
         {
-            waitingTime = new Random().Next(minWaitingTime, maxWaitingTime);
-            info = new ClientInfo();
-            info.classname = " INF2X ";
-            info.studentnr = this.baseStdNumber + n.ToString();
-            info.ip = "127.0.0.1";
-            info.clientid = finishing ? -1 : 1;
+            _waitingTime = new Random().Next(MinWaitingTime, MaxWaitingTime);
+            _info = new ClientInfo
+            {
+                classname = " INF2X ",
+                studentnr = _baseStdNumber + n,
+                ip = "127.0.0.1",
+                clientid = finishing ? -1 : 1
+            };
         }
 
-        public string getClientInfo()
+        private string GetClientInfo()
         {
-            return JsonSerializer.Serialize<ClientInfo>(info);
+            return JsonSerializer.Serialize(_info);
         }
-        public void prepareClient()
+
+        public void PrepareClient()
         {
             try
             {
                 // Establish the remote endpoint for the socket.
-                localEndPoint = new IPEndPoint(ipAddress, portNumber);
+                _localEndPoint = new IPEndPoint(_ipAddress, PortNumber);
                 // Creation TCP/IP Socket using  
-                clientSocket = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                _clientSocket = new Socket(_ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             }
             catch (Exception e)
             {
                 Console.Out.WriteLine("[Client] Preparation failed: {0}", e.Message);
             }
         }
-        public string processMessage(string msg)
+
+        private string ProcessMessage(string msg)
         {
             Console.WriteLine("[Client] from Server -> {0}", msg);
-            string replyMsg = "";
+            var replyMsg = "";
 
             try
             {
                 switch (msg)
                 {
                     case Message.welcome:
-                        replyMsg = this.getClientInfo();
+                        replyMsg = GetClientInfo();
                         break;
                     default:
-                        ClientInfo c = JsonSerializer.Deserialize<ClientInfo>(msg.ToString());
+                        var c = JsonSerializer.Deserialize<ClientInfo>(msg);
                         if (c.status == Message.statusEnd)
-                        {
                             replyMsg = Message.stopCommunication;
-                        }
                         break;
                 }
             }
@@ -93,33 +101,32 @@ namespace SocketClient
             {
                 Console.Out.WriteLine("[Client] processMessage {0}", e.Message);
             }
+
             return replyMsg;
         }
-        public void startCommunication()
+
+        public void StartCommunication()
         {
             Console.Out.WriteLine("[Client] **************");
-            Thread.Sleep(waitingTime);
+            Thread.Sleep(_waitingTime);
             // Data buffer 
-            byte[] messageReceived = new byte[1024];
-            int numBytes = 0;
-            String rcvdMsg = null;
-            Boolean stop = false;
-            string reply = "";
+            var messageReceived = new byte[1024];
+            var stop = false;
 
             try
             {
                 // Connect Socket to the remote endpoint 
-                clientSocket.Connect(localEndPoint);
+                _clientSocket.Connect(_localEndPoint);
                 // print connected EndPoint information  
-                Console.WriteLine("[Client] connected to -> {0} ", clientSocket.RemoteEndPoint.ToString());
+                Console.WriteLine("[Client] connected to -> {0} ", _clientSocket.RemoteEndPoint);
 
                 while (!stop)
                 {
-                    // Receive the messagge using the method Receive().
-                    numBytes = clientSocket.Receive(messageReceived);
-                    rcvdMsg = Encoding.ASCII.GetString(messageReceived, 0, numBytes);
-                    reply = this.processMessage(rcvdMsg);
-                    this.sendReply(reply);
+                    // Receive the message using the method Receive().
+                    var numBytes = _clientSocket.Receive(messageReceived);
+                    var rcvdMsg = Encoding.ASCII.GetString(messageReceived, 0, numBytes);
+                    var reply = ProcessMessage(rcvdMsg);
+                    SendReply(reply);
                     if (reply.Equals(Message.stopCommunication))
                     {
                         stop = true;
@@ -131,79 +138,79 @@ namespace SocketClient
                 Console.WriteLine(e.Message);
             }
         }
-        public void sendReply(string msg)
+
+        private void SendReply(string msg)
         {
             // Create the message to send
             Console.Out.WriteLine("[Client] Message to be sent: {0}", msg);
-            byte[] messageSent = Encoding.ASCII.GetBytes(msg);
-            int byteSent = clientSocket.Send(messageSent);
+            var messageSent = Encoding.ASCII.GetBytes(msg);
+            _clientSocket.Send(messageSent);
         }
-        public void endCommunication()
+
+        public void EndCommunication()
         {
-            Console.Out.WriteLine("[Client] End of communication to -> {0} ", clientSocket.RemoteEndPoint.ToString());
-            clientSocket.Shutdown(SocketShutdown.Both);
-            clientSocket.Close();
+            Console.Out.WriteLine("[Client] End of communication to -> {0} ", _clientSocket.RemoteEndPoint);
+            _clientSocket.Shutdown(SocketShutdown.Both);
+            _clientSocket.Close();
         }
     }
 
     public class ClientsSimulator
     {
-        private int numberOfClients;
-        private Client[] clients;
-        public readonly int waitingTimeForStop = 2000;
+        private readonly int _numberOfClients;
+        private readonly Client[] _clients;
+        private const int WaitingTimeForStop = 2000;
 
 
-        public ClientsSimulator(int n, int t)
+        public ClientsSimulator(int n)
         {
-            numberOfClients = n;
-            clients = new Client[numberOfClients];
-            for (int i = 0; i < numberOfClients; i++)
+            _numberOfClients = n;
+            _clients = new Client[_numberOfClients];
+            for (var i = 0; i < _numberOfClients; i++)
             {
-                clients[i] = new Client(false, i);
+                _clients[i] = new Client(false, i);
             }
         }
 
         public void SequentialSimulation()
         {
             Console.Out.WriteLine("\n[ClientSimulator] Sequential simulator is going to start ...");
-            for (int i = 0; i < numberOfClients; i++)
+            for (var i = 0; i < _numberOfClients; i++)
             {
-                clients[i].prepareClient();
-                clients[i].startCommunication();
-                clients[i].endCommunication();
+                _clients[i].PrepareClient();
+                _clients[i].StartCommunication();
+                _clients[i].EndCommunication();
             }
 
             Console.Out.WriteLine("\n[ClientSimulator] All clients finished with their communications ... ");
 
-            Thread.Sleep(waitingTimeForStop);
+            Thread.Sleep(WaitingTimeForStop);
 
-            Client endClient = new Client(true, -1);
-            endClient.prepareClient();
-            endClient.startCommunication();
-            endClient.endCommunication();
+            var endClient = new Client(true, -1);
+            endClient.PrepareClient();
+            endClient.StartCommunication();
+            endClient.EndCommunication();
         }
 
+        // ReSharper disable once UnusedMember.Global
         public void ConcurrentSimulation()
         {
             Console.Out.WriteLine("[ClientSimulator] Concurrent simulator is going to start ...");
             // todo: In order to test the final solution, it is recommended to implement this method.
-
-
         }
     }
-    class Program
+
+    internal static class Program
     {
         // Main Method 
-        static void Main(string[] args)
+        private static void Main()
         {
             Console.Clear();
-            int wt = 5000, nc = 20;
-            ClientsSimulator clientsSimulator = new ClientsSimulator(nc, wt);
+            const int wt = 5000, nc = 20;
+            var clientsSimulator = new ClientsSimulator(nc);
             clientsSimulator.SequentialSimulation();
             Thread.Sleep(wt);
-            // todo: Uncomment this, after finishing the method.
-            //clientsSimulator.ConcurrentSimulation();
-
+            clientsSimulator.ConcurrentSimulation();
         }
     }
 }
