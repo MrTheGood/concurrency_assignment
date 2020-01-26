@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
@@ -41,18 +42,18 @@ namespace SocketClient
         private readonly ClientInfo _info;
         private IPEndPoint _localEndPoint;
         private readonly IPAddress _ipAddress = IPAddress.Parse("127.0.0.1");
-        private readonly int PortNumber = 11111;
-        public readonly int MinWaitingTime = 50, MaxWaitingTime = 100;
+        private const int PortNumber = 11111;
+        private const int MinWaitingTime = 50, MaxWaitingTime = 100;
         private readonly int _waitingTime;
-        private string _baseStdNumber = "0700";
+        private const string BaseStdNumber = "0700";
 
         public Client(bool finishing, int n)
         {
             _waitingTime = new Random().Next(MinWaitingTime, MaxWaitingTime);
             _info = new ClientInfo
             {
-                classname = " INF2X ",
-                studentnr = _baseStdNumber + n,
+                classname = " DINF2 ",
+                studentnr = BaseStdNumber + n,
                 ip = "127.0.0.1",
                 clientid = finishing ? -1 : 1
             };
@@ -128,9 +129,7 @@ namespace SocketClient
                     var reply = ProcessMessage(rcvdMsg);
                     SendReply(reply);
                     if (reply.Equals(Message.stopCommunication))
-                    {
                         stop = true;
-                    }
                 }
             }
             catch (Exception e)
@@ -172,14 +171,30 @@ namespace SocketClient
             }
         }
 
-        public void SequentialSimulation()
+        public void ConcurrentSimulation()
         {
-            Console.Out.WriteLine("\n[ClientSimulator] Sequential simulator is going to start ...");
+            Console.Out.WriteLine("\n[ClientSimulator] Concurrent simulator is going to start ...");
+
+            var threads = new ArrayList();
             for (var i = 0; i < _numberOfClients; i++)
             {
-                _clients[i].PrepareClient();
-                _clients[i].StartCommunication();
-                _clients[i].EndCommunication();
+                var client = _clients[i];
+                var clientNumber = i;
+
+                var thread = new Thread(() =>
+                {
+                    Console.Out.WriteLine("Setting up client number {0}", clientNumber);
+                    client.PrepareClient();
+                    client.StartCommunication();
+                    client.EndCommunication();
+                });
+                thread.Start();
+                threads.Add(thread);
+            }
+
+            foreach (Thread thread in threads)
+            {
+                thread.Join();
             }
 
             Console.Out.WriteLine("\n[ClientSimulator] All clients finished with their communications ... ");
@@ -191,13 +206,6 @@ namespace SocketClient
             endClient.StartCommunication();
             endClient.EndCommunication();
         }
-
-        // ReSharper disable once UnusedMember.Global
-        public void ConcurrentSimulation()
-        {
-            Console.Out.WriteLine("[ClientSimulator] Concurrent simulator is going to start ...");
-            // todo: In order to test the final solution, it is recommended to implement this method.
-        }
     }
 
     internal static class Program
@@ -206,11 +214,8 @@ namespace SocketClient
         private static void Main()
         {
             Console.Clear();
-            const int wt = 5000, numberOfClients = 20;
-            var clientsSimulator = new ClientsSimulator(numberOfClients);
-            clientsSimulator.SequentialSimulation();
-            Thread.Sleep(wt);
-            clientsSimulator.ConcurrentSimulation();
+            const int numberOfClients = 249;
+            new ClientsSimulator(numberOfClients).ConcurrentSimulation();
         }
     }
 }

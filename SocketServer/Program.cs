@@ -1,7 +1,9 @@
 ﻿/*** Fill these lines with your complete information.
  * Note: Incomplete information may result in FAIL.
  * Member 1: [First and Last name, first member]: Maarten de Goede
+ * Member 2: [First name and Last name, second member]: Corné Visser
  * Std Number 1: [Student number of the first member] 0966770
+ * Std Number 2: [Student number of the second member] 0965144
  * Class: [what is your class, example INF2C] DINF2
  ***/
 
@@ -12,7 +14,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-/* Note: If you are using .net core 2.1, install System.Text.Json (use NuGet). */
 using System.Text.Json;
 using System.Threading;
 
@@ -22,7 +23,7 @@ namespace SocketServer
     [SuppressMessage("ReSharper", "IdentifierTypo")]
     [SuppressMessage("ReSharper", "UnusedMember.Global")]
     [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
-    public abstract class ClientInfo
+    public class ClientInfo
     {
         public string studentnr { get; set; }
         public string classname { get; set; }
@@ -42,8 +43,10 @@ namespace SocketServer
         public const string secret = "SECRET";
     }
 
-    public class SequentialServer
+    public class Server
     {
+        private readonly Mutex _mutex = new Mutex();
+
         private Socket _listener;
         private IPEndPoint _localEndPoint;
         private readonly IPAddress _ipAddress = IPAddress.Parse("127.0.0.1");
@@ -51,13 +54,11 @@ namespace SocketServer
 
         private readonly LinkedList<ClientInfo> _clients = new LinkedList<ClientInfo>();
 
-        private bool _stopCond;
-        private const int ProcessingTime = 1000;
-        private const int ListeningQueueSize = 5;
+        private const int ListeningQueueSize = 500;
 
         public void PrepareServer()
         {
-            var bytes = new byte[1024];
+            var threads = new List<Thread>();
 
             try
             {
@@ -70,23 +71,15 @@ namespace SocketServer
                 _listener.Bind(_localEndPoint);
                 // This is a non-blocking listen with max number of pending requests
                 _listener.Listen(ListeningQueueSize);
+
                 while (true)
                 {
                     Console.WriteLine("Waiting connection ... ");
-                    // Suspend while waiting for incoming connection 
-                    var connection = _listener.Accept();
-                    SendReply(connection, Message.welcome);
 
-                    while (true)
-                    {
-                        var numByte = connection.Receive(bytes);
-                        var data = Encoding.ASCII.GetString(bytes, 0, numByte);
-                        var replyMsg = ProcessMessage(data);
-                        
-                        if (replyMsg.Equals(Message.stopCommunication))
-                            break;
-                        SendReply(connection, replyMsg);
-                    }
+                    var socket = _listener.Accept();
+                    var thread = new Thread(() => HandleClient(socket));
+                    thread.Start();
+                    threads.Add(thread);
                 }
             }
             catch (Exception e)
@@ -95,96 +88,68 @@ namespace SocketServer
             }
         }
 
-        // ReSharper disable once UnusedMember.Global
-        // ReSharper disable once UnusedParameter.Global
-        public void HandleClient(Socket con)
+        private void HandleClient(Socket socket)
         {
+            SendReply(socket, Message.welcome);
+
+            while (true)
+            {
+                var bytes = new byte[1024];
+
+                var numByte = socket.Receive(bytes);
+                var data = Encoding.ASCII.GetString(bytes, 0, numByte);
+                var replyMsg = ProcessMessage(data);
+
+                if (replyMsg.Equals(Message.stopCommunication))
+                    break;
+                SendReply(socket, replyMsg);
+            }
         }
 
-        private string ProcessMessage(string msg)
+        private string ProcessMessage(string message)
         {
-            Thread.Sleep(ProcessingTime);
-            Console.WriteLine("[Server] received from the client -> {0} ", msg);
-            var replyMsg = "";
+            Console.WriteLine("[Server] received from the client -> {0} ", message);
 
             try
             {
-                switch (msg)
-                {
-                    case Message.stopCommunication:
-                        replyMsg = Message.stopCommunication;
-                        break;
-                    default:
-                        var c = JsonSerializer.Deserialize<ClientInfo>(msg);
-                        _clients.AddLast(c);
-                        if (c.clientid == -1)
-                        {
-                            _stopCond = true;
-                            ExportResults();
-                        }
+                if (message == Message.stopCommunication)
+                    return Message.stopCommunication;
 
-                        c.secret = c.studentnr + Message.secret;
-                        c.status = Message.statusEnd;
-                        replyMsg = JsonSerializer.Serialize(c);
-                        break;
-                }
+                var clientInfo = JsonSerializer.Deserialize<ClientInfo>(message);
+
+                _mutex.WaitOne();
+                _clients.AddLast(clientInfo);
+                _mutex.ReleaseMutex();
+
+                if (clientInfo.clientid == -1)
+                    PrintClients();
+
+                clientInfo.secret = clientInfo.studentnr + Message.secret;
+                clientInfo.status = Message.statusEnd;
+                return JsonSerializer.Serialize(clientInfo);
             }
             catch (Exception e)
             {
                 Console.Out.WriteLine("[Server] processMessage {0}", e.Message);
+                return "";
             }
-
-            return replyMsg;
         }
 
-        private static void SendReply(Socket connection, string msg)
+        private static void SendReply(Socket connection, string message)
         {
-            var encodedMsg = Encoding.ASCII.GetBytes(msg);
-            connection.Send(encodedMsg);
-        }
-
-        private void ExportResults()
-        {
-            if (_stopCond)
-                PrintClients();
+            connection.Send(Encoding.ASCII.GetBytes(message));
         }
 
         private void PrintClients()
         {
             const string delimiter = " , ";
             Console.Out.WriteLine("[Server] This is the list of clients communicated");
-            foreach (var c in _clients)
-            {
-                Console.WriteLine(c.classname + delimiter + c.studentnr + delimiter + c.clientid);
-            }
+            foreach (var client in _clients)
+                Console.WriteLine(client.classname + delimiter + client.studentnr + delimiter + client.clientid);
 
             Console.Out.WriteLine("[Server] Number of handled clients: {0}", _clients.Count);
 
             _clients.Clear();
-            _stopCond = false;
-        }
-    }
-
-
-    // ReSharper disable once UnusedType.Global
-    public class ConcurrentServer
-    {
-        // todo: implement this class
-    }
-
-    public static class ServerSimulator
-    {
-        public static void SequentialRun()
-        {
-            Console.Out.WriteLine("[Server] A sample server, sequential version ...");
-            SequentialServer server = new SequentialServer();
-            server.PrepareServer();
-        }
-
-        // ReSharper disable once UnusedMember.Global
-        public static void ConcurrentRun()
-        {
-            // todo: After finishing the concurrent version of the server, implement this method to start the concurrent server
         }
     }
 
@@ -194,9 +159,7 @@ namespace SocketServer
         private static void Main()
         {
             Console.Clear();
-            ServerSimulator.SequentialRun();
-            // todo: uncomment this when the solution is ready.
-            //ServerSimulator.concurrentRun();
+            new Server().PrepareServer();
         }
     }
 }
