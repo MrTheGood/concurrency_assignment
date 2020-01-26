@@ -206,8 +206,8 @@ namespace SocketClient
         private static void Main()
         {
             Console.Clear();
-            const int wt = 5000, nc = 20;
-            var clientsSimulator = new ClientsSimulator(nc);
+            const int wt = 5000, numberOfClients = 20;
+            var clientsSimulator = new ClientsSimulator(numberOfClients);
             clientsSimulator.SequentialSimulation();
             Thread.Sleep(wt);
             clientsSimulator.ConcurrentSimulation();

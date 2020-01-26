@@ -1,24 +1,27 @@
 ﻿/*** Fill these lines with your complete information.
  * Note: Incomplete information may result in FAIL.
- * Mameber 1: [First and Last name, first member]: // todo: write here.
- * Mameber 2: [First and Last name, second member]: // todo: write here.
- * Std Number 1: [Student number of the first member] // todo: write here.
- * Std Number 2: [Student number of the second member] // todo: write here.
- * Class: [what is your class, example INF2C] // todo: write here.
+ * Member 1: [First and Last name, first member]: Maarten de Goede
+ * Std Number 1: [Student number of the first member] 0966770
+ * Class: [what is your class, example INF2C] DINF2
  ***/
 
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 /* Note: If you are using .net core 2.1, install System.Text.Json (use NuGet). */
-using System.Text.Json; 
+using System.Text.Json;
 using System.Threading;
 
 namespace SocketServer
 {
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    [SuppressMessage("ReSharper", "IdentifierTypo")]
+    [SuppressMessage("ReSharper", "UnusedMember.Global")]
+    [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
     public class ClientInfo
     {
         public string studentnr { get; set; }
@@ -30,7 +33,8 @@ namespace SocketServer
         public string status { get; set; }
     }
 
-    public class Message
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
+    public static class Message
     {
         public const string welcome = "WELCOME";
         public const string stopCommunication = "COMC-STOP";
@@ -40,75 +44,68 @@ namespace SocketServer
 
     public class SequentialServer
     {
-        public Socket listener;
-        public IPEndPoint localEndPoint;
-        public IPAddress ipAddress = IPAddress.Parse("127.0.0.1");
-        public readonly int portNumber = 11111;
+        private Socket _listener;
+        private IPEndPoint _localEndPoint;
+        private readonly IPAddress _ipAddress = IPAddress.Parse("127.0.0.1");
+        private const int PortNumber = 11111;
 
-        public String results = "";
-        public LinkedList<ClientInfo> clients = new LinkedList<ClientInfo>();
+        private readonly LinkedList<ClientInfo> _clients = new LinkedList<ClientInfo>();
 
-        private Boolean stopCond = false;
-        private int processingTime = 1000;
-        private int listeningQueueSize = 5;
+        private bool _stopCond;
+        private const int ProcessingTime = 1000;
+        private const int ListeningQueueSize = 5;
 
-        public void prepareServer()
+        public void PrepareServer()
         {
-            byte[] bytes = new Byte[1024];
-            String data = null;
-            int numByte = 0;
-            string replyMsg = "";
-            bool stop;
+            var bytes = new byte[1024];
 
             try
             {
                 Console.WriteLine("[Server] is ready to start ...");
                 // Establish the local endpoint
-                localEndPoint = new IPEndPoint(ipAddress, portNumber);
-                listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                _localEndPoint = new IPEndPoint(_ipAddress, PortNumber);
+                _listener = new Socket(_ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                 Console.Out.WriteLine("[Server] A socket is established ...");
                 // associate a network address to the Server Socket. All clients must know this address
-                listener.Bind(localEndPoint);
+                _listener.Bind(_localEndPoint);
                 // This is a non-blocking listen with max number of pending requests
-                listener.Listen(listeningQueueSize);
+                _listener.Listen(ListeningQueueSize);
                 while (true)
                 {
                     Console.WriteLine("Waiting connection ... ");
                     // Suspend while waiting for incoming connection 
-                    Socket connection = listener.Accept();
-                    this.sendReply(connection, Message.welcome);
+                    var connection = _listener.Accept();
+                    SendReply(connection, Message.welcome);
 
-                    stop = false;
-                    while (!stop)
+                    while (true)
                     {
-                        numByte = connection.Receive(bytes);
-                        data = Encoding.ASCII.GetString(bytes, 0, numByte);
-                        replyMsg = processMessage(data);
+                        var numByte = connection.Receive(bytes);
+                        var data = Encoding.ASCII.GetString(bytes, 0, numByte);
+                        var replyMsg = ProcessMessage(data);
+                        
                         if (replyMsg.Equals(Message.stopCommunication))
-                        {
-                            stop = true;
                             break;
-                        }
-                        else
-                            this.sendReply(connection, replyMsg);
+                        SendReply(connection, replyMsg);
                     }
-
                 }
-
             }
             catch (Exception e)
             {
                 Console.Out.WriteLine(e.Message);
             }
         }
-        public void handleClient(Socket con)
+
+        // ReSharper disable once UnusedMember.Global
+        // ReSharper disable once UnusedParameter.Global
+        public void HandleClient(Socket con)
         {
         }
-        public string processMessage(String msg)
+
+        private string ProcessMessage(string msg)
         {
-            Thread.Sleep(processingTime);
+            Thread.Sleep(ProcessingTime);
             Console.WriteLine("[Server] received from the client -> {0} ", msg);
-            string replyMsg = "";
+            var replyMsg = "";
 
             try
             {
@@ -118,16 +115,17 @@ namespace SocketServer
                         replyMsg = Message.stopCommunication;
                         break;
                     default:
-                        ClientInfo c = JsonSerializer.Deserialize<ClientInfo>(msg.ToString());
-                        clients.AddLast(c);
+                        var c = JsonSerializer.Deserialize<ClientInfo>(msg);
+                        _clients.AddLast(c);
                         if (c.clientid == -1)
                         {
-                            stopCond = true;
-                            exportResults();
+                            _stopCond = true;
+                            ExportResults();
                         }
+
                         c.secret = c.studentnr + Message.secret;
                         c.status = Message.statusEnd;
-                        replyMsg = JsonSerializer.Serialize<ClientInfo>(c);
+                        replyMsg = JsonSerializer.Serialize(c);
                         break;
                 }
             }
@@ -138,64 +136,67 @@ namespace SocketServer
 
             return replyMsg;
         }
-        public void sendReply(Socket connection, string msg)
+
+        private static void SendReply(Socket connection, string msg)
         {
-            byte[] encodedMsg = Encoding.ASCII.GetBytes(msg);
+            var encodedMsg = Encoding.ASCII.GetBytes(msg);
             connection.Send(encodedMsg);
         }
-        public void exportResults()
+
+        private void ExportResults()
         {
-            if (stopCond)
-            {
-                this.printClients();
-            }
+            if (_stopCond)
+                PrintClients();
         }
-        public void printClients()
+
+        private void PrintClients()
         {
-            string delimiter = " , ";
+            const string delimiter = " , ";
             Console.Out.WriteLine("[Server] This is the list of clients communicated");
-            foreach (ClientInfo c in clients)
+            foreach (var c in _clients)
             {
-                Console.WriteLine(c.classname + delimiter + c.studentnr + delimiter + c.clientid.ToString());
+                Console.WriteLine(c.classname + delimiter + c.studentnr + delimiter + c.clientid);
             }
-            Console.Out.WriteLine("[Server] Number of handled clients: {0}", clients.Count);
 
-            clients.Clear();
-            stopCond = false;
+            Console.Out.WriteLine("[Server] Number of handled clients: {0}", _clients.Count);
 
+            _clients.Clear();
+            _stopCond = false;
         }
     }
 
 
+    // ReSharper disable once UnusedType.Global
     public class ConcurrentServer
     {
         // todo: implement this class
-
     }
 
-    public class ServerSimulator
+    public static class ServerSimulator
     {
-        public static void sequentialRun()
+        public static void SequentialRun()
         {
             Console.Out.WriteLine("[Server] A sample server, sequential version ...");
             SequentialServer server = new SequentialServer();
-            server.prepareServer();
+            server.PrepareServer();
         }
-        public static void concurrentRun()
+
+        // ReSharper disable once UnusedMember.Global
+        public static void ConcurrentRun()
         {
             // todo: After finishing the concurrent version of the server, implement this method to start the concurrent server
         }
     }
-    class Program
+
+    internal static class Program
     {
         // Main Method 
-        static void Main(string[] args)
+        private static void Main()
         {
             Console.Clear();
-            ServerSimulator.sequentialRun();
+            ServerSimulator.SequentialRun();
             // todo: uncomment this when the solution is ready.
             //ServerSimulator.concurrentRun();
         }
-
     }
 }

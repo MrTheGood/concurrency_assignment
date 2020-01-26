@@ -28,7 +28,6 @@
           </e>
         </e>
         <e p="Program.cs" t="Include" />
-        <e p="Program.cs~" t="Include" />
         <e p="SocketServer.csproj" t="IncludeRecursive" />
       </e>
     </e>
